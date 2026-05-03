@@ -69,7 +69,7 @@ pkgbase="linux-$_pkgsuffix"
 # VERSION — ONLY THESE TWO LINES NEED TO CHANGE PER RELEASE
 # ==========================================================================
 _major=6.19
-_minor=0
+_minor=1
 # ==========================================================================
 
 pkgver=${_major}.${_minor}
@@ -526,24 +526,3 @@ for _p in "${pkgname[@]}"; do
 done
 
 # vim:set ts=8 sts=2 sw=2 et:
-sha256sums=('3fa8335e848037c8e97e9493c33d69747fdf3fb77ed3b4ffa95648106a82402f'
-            '303079a8250b8f381f82b03f90463d12ac98d4f6b149b761ea75af1323521357'
-            '8e8bcdc401745cb9ee2d199e3882acae2a7e94f1cd08f4226eeb0bcc3de497f7'
-            '0083019f00e2adca28c75ce876472c7544c50d524023af485604b5172bef75e0'
-            '6578a964de7bd3730daef969292cb5febcd7937b438b1f806889c0e74239f5d3'
-            '5113eaf632692852082972ff881321428b060efd4ff0177c2ce3c72c64ad76e7'
-            'dbad1231a9a0a2bcf4f6567149e5b86f82f4bb29a3b3fa91543b1996e66353f4'
-            'a209e3e9c907a5b8803b841e1636eb18e849ff812f29fcff8ba57b140ccb5474'
-            '516babc082c6e21c1e842e5abdfd3e882c6f6e1039a4a909d68cd635100b95a3'
-            'ccc2f38598d9a49e19aa88d01c797654468b86f07beda4d355067a9d9083880e'
-            'e917bf758d93bdd3ee0836d4314849aada9a0902cd0161e1f357f71953221101'
-            '33871bca7d63230902b6c0e41460c295266fb3aaf31a57857666c55775efa560'
-            '32589bbccf6672e427f91cdc991be2c3d4270969763a79c6c1edef8f9c9ab5b5'
-            'd7b7856ef1693bb8633748e647f551d84a6dd2070abdc75340dd8bcba98eada7'
-            '5617c0fb8ae0db1de3865aafb65b21d7b5b5e5857d4baa34c1c17f2a2e502485'
-            '64509e957756d942d5561801123cf456e8caa1aa44bd69c2d5f97093c4830f9f'
-            'df547b8697f058fcfd9ae082a2ae4a87cd4ae5d7dae70129889da00219db4733'
-            'dbaddf5ed1ec7aec515867facd17a09e083289eb4185b3af4f3bc1d6c9bd1ad7'
-            '1d703ad95120df846d77b0c5338af1829119e2bfcac258ebedf0145ba02e22f3'
-            '76b91256a525c4f626802b5ad29ddb1a9477bc90001c9ea8c469ae77d07593fc'
-            '32b91e80ddc124dc7f31bbde65fcb18fa7a7f194f953ccfc8f14d630aac4ddc4')

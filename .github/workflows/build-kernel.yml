@@ -94,13 +94,16 @@ jobs:
               }
 
               echo "=== Building kernel ==="
-              sudo -u builduser makepkg -sf --noconfirm 2>&1 | tail -80
-
+              sudo -u builduser makepkg -sf --noconfirm 2>&1 | tee /tmp/build.log
               echo "=== Build complete ==="
               ls -la *.pkg.tar.zst
 
               echo "=== ccache stats ==="
               ccache -s
+
+              # Show any errors from the build
+              echo "=== Build errors (if any) ==="
+              grep -E "error:|Error |FAILED" /tmp/build.log | grep -v "optional\|secret key\|command failed" | head -20 || true
             '
 
       - name: Verify packages exist

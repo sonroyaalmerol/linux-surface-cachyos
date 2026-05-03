@@ -1,0 +1,216 @@
+name: Build & Release Kernel
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish to GitHub Releases after build"
+        required: false
+        type: boolean
+        default: true
+
+  # Auto-trigger after a successful sync
+  workflow_run:
+    workflows: ["Sync & Verify CachyOS + Surface Kernel"]
+    types:
+      - completed
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+env:
+  # Container image — pinned Arch base with build deps pre-installed
+  BUILD_IMAGE: archlinux:latest
+
+jobs:
+  # ==========================================================================
+  # Build the kernel inside an Arch Linux container
+  # ==========================================================================
+  build:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up ccache directory
+        run: |
+          mkdir -p /tmp/kernel-ccache
+          echo "CCACHE_DIR=/tmp/kernel-ccache" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=5G" >> $GITHUB_ENV
+          # Restore from persistent cache if it exists
+          if [ -d "$RUNNER_TEMP/kernel-ccache" ]; then
+            cp -a "$RUNNER_TEMP/kernel-ccache/." /tmp/kernel-ccache/
+          fi
+
+      - name: Read kernel version
+        id: version
+        run: |
+          cd pkg/arch/kernel-cachyos
+          VER=$(grep '^pkgver=' PKGBUILD | cut -d= -f2)
+          REL=$(grep '^pkgrel=' PKGBUILD | cut -d= -f2)
+          SUFFIX=$(grep '^_pkgsuffix=' PKGBUILD | head -1 | cut -d= -f2)
+          echo "version=${VER}-${REL}" >> $GITHUB_OUTPUT
+          echo "suffix=${SUFFIX}" >> $GITHUB_OUTPUT
+          echo "tag=${VER}-${REL}" >> $GITHUB_OUTPUT
+          echo "pkgbase=linux-${SUFFIX}" >> $GITHUB_OUTPUT
+
+      - name: Build kernel in Arch container
+        run: |
+          cd pkg/arch/kernel-cachyos
+
+          echo "Building linux-${{ steps.version.outputs.suffix }} ${{ steps.version.outputs.version }}..."
+
+          docker run --rm \
+            --volume "$(pwd):/build:rw" \
+            --volume "/tmp/kernel-ccache:/ccache:rw" \
+            --env CCACHE_DIR=/ccache \
+            --env CCACHE_MAXSIZE=5G \
+            --env MAKEFLAGS="-j$(nproc)" \
+            archlinux:latest \
+            bash -euo pipefail -c '
+              echo "=== Installing build dependencies ==="
+              pacman -Syu --noconfirm
+              pacman -S --noconfirm --needed base-devel bc binutils cpio gettext \
+                libelf openssl pahole perl python rust rust-bindgen rust-src \
+                tar xxhash xz zlib zstd ccache git
+
+              echo "=== Configuring ccache ==="
+              export CCACHE_DIR=/ccache
+              export CCACHE_MAXSIZE=5G
+              ccache -z
+
+              echo "=== Creating build user ==="
+              useradd -m -G wheel builduser
+              echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+              chown -R builduser: /build
+
+              echo "=== Building kernel ==="
+              cd /build
+              sudo -u builduser makepkg -sf --noconfirm 2>&1 | tail -50
+
+              echo "=== Build complete ==="
+              ls -la *.pkg.tar.zst
+
+              echo "=== ccache stats ==="
+              ccache -s
+            '
+
+      - name: Verify packages exist
+        id: packages
+        run: |
+          cd pkg/arch/kernel-cachyos
+          PKGS=$(find . -maxdepth 1 -name "*.pkg.tar.zst" | sort)
+          echo "Found packages:"
+          echo "$PKGS"
+
+          # Verify both kernel and headers packages exist
+          KERNEL=$(echo "$PKGS" | grep -v headers || true)
+          HEADERS=$(echo "$PKGS" | grep headers || true)
+
+          if [ -z "$KERNEL" ]; then
+            echo "ERROR: Kernel package not found!"
+            exit 1
+          fi
+
+          echo "kernel_pkg=$(basename $KERNEL)" >> $GITHUB_OUTPUT
+          echo "headers_pkg=$(basename $HEADERS)" >> $GITHUB_OUTPUT
+
+          # Generate checksums
+          cd ..
+          for f in kernel-cachyos/*.pkg.tar.zst; do
+            sha256sum "$f" >> CHECKSUMS.txt
+          done
+          echo "Generated CHECKSUMS.txt:"
+          cat CHECKSUMS.txt
+
+      - name: Persist ccache
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/kernel-ccache"
+          cp -a /tmp/kernel-ccache/. "$RUNNER_TEMP/kernel-ccache/" 2>/dev/null || true
+          echo "ccache saved to $RUNNER_TEMP/kernel-ccache"
+          # Show final ccache stats
+          CCACHE_DIR=/tmp/kernel-ccache ccache -s 2>/dev/null || true
+
+      - name: Upload packages as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-packages
+          path: |
+            pkg/arch/kernel-cachyos/*.pkg.tar.zst
+            pkg/CHECKSUMS.txt
+          retention-days: 90
+
+  # ==========================================================================
+  # Publish to GitHub Releases
+  # ==========================================================================
+  release:
+    needs: build
+    if: ${{ inputs.release != false }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: kernel-packages
+          path: packages/
+
+      - name: Determine release tag
+        id: version
+        run: |
+          VER=$(grep '^pkgver=' pkg/arch/kernel-cachyos/PKGBUILD | cut -d= -f2)
+          REL=$(grep '^pkgrel=' pkg/arch/kernel-cachyos/PKGBUILD | cut -d= -f2)
+          echo "tag=${VER}-${REL}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          REPO="${{ github.repository }}"
+
+          cat > release-notes.md << EOF
+          ## Linux Surface-CachyOS \`${TAG}\`
+
+          Pre-built kernel packages combining CachyOS performance patches with linux-surface device support.
+
+          ### Install
+
+          \`\`\`bash
+          # Download
+          curl -sLO "https://github.com/${REPO}/releases/download/kernel-${TAG}/${{ needs.build.outputs.kernel_pkg || 'linux-surface-cachyos-' + tag + '-x86_64.pkg.tar.zst' }}"
+          curl -sLO "https://github.com/${REPO}/releases/download/kernel-${TAG}/${{ needs.build.outputs.headers_pkg || 'linux-surface-cachyos-headers-' + tag + '-x86_64.pkg.tar.zst' }}"
+
+          # Install
+          sudo pacman -U *.pkg.tar.zst
+
+          # Reboot
+          sudo reboot
+          \`\`\`
+
+          ### What's included
+
+          **CachyOS:** BORE scheduler, -O3, 1000Hz, full preempt, THP=madvise, native CPU optimizations
+          **Surface:** SAM, IPTS, ITHC, cameras, WiFi (mwifiex+ath10k), type cover, power button, RTC, HID
+
+          Built from commit \`${{ github.sha }}\`
+          EOF
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: kernel-${{ steps.version.outputs.tag }}
+          name: Linux Surface-CachyOS ${{ steps.version.outputs.tag }}
+          body_path: release-notes.md
+          files: |
+            packages/*.pkg.tar.zst
+            packages/CHECKSUMS.txt
+          draft: false
+          prerelease: false

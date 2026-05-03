@@ -176,9 +176,13 @@ jobs:
       - name: Determine release tag
         id: version
         run: |
-          VER=$(grep '^pkgver=' pkg/arch/kernel-cachyos/PKGBUILD | cut -d= -f2)
-          REL=$(grep '^pkgrel=' pkg/arch/kernel-cachyos/PKGBUILD | cut -d= -f2)
-          echo "tag=${VER}-${REL}" >> $GITHUB_OUTPUT
+          # Extract version from PKGBUILD (handles variable references)
+          _MAJOR=$(grep '^_major=' pkg/arch/kernel-cachyos/PKGBUILD | cut -d= -f2)
+          _MINOR=$(grep '^_minor=' pkg/arch/kernel-cachyos/PKGBUILD | cut -d= -f2)
+          PKGREL=$(grep '^pkgrel=' pkg/arch/kernel-cachyos/PKGBUILD | cut -d= -f2)
+          TAG="${_MAJOR}.${_MINOR}-${PKGREL}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Package version: ${TAG}"
 
       - name: Generate release notes
         run: |

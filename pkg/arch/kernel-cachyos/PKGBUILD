@@ -101,6 +101,7 @@ _surface_overrides_source="https://raw.githubusercontent.com/linux-surface/linux
 
 # Static source files — these are committed in the repo alongside PKGBUILD
 source=(
+    "fixup-patch-conflicts.py"
     "cachyos-surface.config"
     "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.19.tar.xz"
     "https://raw.githubusercontent.com/CachyOS/kernel-patches/776ee4906c343ffb826afc390a923b0958617383/6.19/all/0001-cachyos-base-all.patch"
@@ -177,35 +178,8 @@ prepare() {
 
     # ---------------------------------------------------------------
     # Step 2.5: Fix known patch conflicts
-    # The CachyOS base-all AccECN patch hunk for tcp.h sometimes fails
-    # to apply, leaving TCP_CONG_WANTS_CE_EVENTS undefined but referenced.
-    # Add the missing define if it's referenced but not defined.
     # ---------------------------------------------------------------
-    if grep -q 'tcp_ca_wants_ce_events' include/net/tcp.h && \
-       ! grep -q '#define TCP_CONG_WANTS_CE_EVENTS' include/net/tcp.h; then
-        msg2 "Fixing missing TCP_CONG_WANTS_CE_EVENTS define"
-        # Use python for reliable text replacement (avoids sed escaping issues)
-        python3 << 'PYFIX'
-with open("include/net/tcp.h", "r") as f:
-    lines = f.readlines()
-
-# Find the TCP_CONG_NEEDS_ECN line and add WANTS_CE_EVENTS after it
-for i, line in enumerate(lines):
-    if line.startswith("#define TCP_CONG_NEEDS_ECN"):
-        # Add the new define after it
-        if not any(l.strip().startswith("#define TCP_CONG_WANTS_CE_EVENTS") for l in lines):
-            lines.insert(i + 1, "/* Wants notification of CE events (AccECN) */\n")
-            lines.insert(i + 2, "#define TCP_CONG_WANTS_CE_EVENTS\tBIT(5)\n")
-        # Also fix TCP_CONG_MASK to include it
-        for j, ml in enumerate(lines):
-            if ml.startswith("#define TCP_CONG_MASK"):
-                lines[j] = "#define TCP_CONG_MASK\t(TCP_CONG_NON_RESTRICTED | TCP_CONG_NEEDS_ECN | TCP_CONG_WANTS_CE_EVENTS)\n"
-        break
-
-with open("include/net/tcp.h", "w") as f:
-    f.writelines(lines)
-PYFIX
-    fi
+    python3 "${startdir}/fixup-patch-conflicts.py"
 
     # ---------------------------------------------------------------
     # Step 3: Download and apply Surface patches dynamically
@@ -558,7 +532,8 @@ for _p in "${pkgname[@]}"; do
 done
 
 # vim:set ts=8 sts=2 sw=2 et:
-sha256sums=('ffa9693b551dd2113a5c522fdced9e6f2d2466228a33cc2c3f48c0a022655421'
+sha256sums=('6ebc1c6a90c955df75cb980f57f138511270a35d2f627469cd2669f995b50762'
+            'ffa9693b551dd2113a5c522fdced9e6f2d2466228a33cc2c3f48c0a022655421'
             '303079a8250b8f381f82b03f90463d12ac98d4f6b149b761ea75af1323521357'
             '8e8bcdc401745cb9ee2d199e3882acae2a7e94f1cd08f4226eeb0bcc3de497f7'
             '0083019f00e2adca28c75ce876472c7544c50d524023af485604b5172bef75e0'

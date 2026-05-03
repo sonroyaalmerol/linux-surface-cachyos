@@ -176,6 +176,21 @@ prepare() {
     done
 
     # ---------------------------------------------------------------
+    # Step 2.5: Fix known patch conflicts
+    # The CachyOS base-all AccECN patch hunk for tcp.h sometimes fails
+    # to apply, leaving TCP_CONG_WANTS_CE_EVENTS undefined but referenced.
+    # Add the missing define if it's referenced but not defined.
+    # ---------------------------------------------------------------
+    if grep -q 'tcp_ca_wants_ce_events' include/net/tcp.h && \
+       ! grep -q '#define TCP_CONG_WANTS_CE_EVENTS' include/net/tcp.h; then
+        msg2 "Fixing missing TCP_CONG_WANTS_CE_EVENTS define"
+        sed -i '/^#define TCP_CONG_NEEDS_ECN/a\
+/* Wants notification of CE events (AccECN) */\
+#define TCP_CONG_WANTS_CE_EVENTS\\tBIT(5)' include/net/tcp.h
+        sed -i 's/^#define TCP_CONG_MASK.*/#define TCP_CONG_MASK\\t(TCP_CONG_NON_RESTRICTED | TCP_CONG_NEEDS_ECN | TCP_CONG_WANTS_CE_EVENTS)/' include/net/tcp.h
+    fi
+
+    # ---------------------------------------------------------------
     # Step 3: Download and apply Surface patches dynamically
     # ---------------------------------------------------------------
     # If Surface patches weren't in the source array (e.g. old-style build),

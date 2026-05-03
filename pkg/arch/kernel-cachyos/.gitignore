@@ -1,0 +1,17 @@
+# Build artifacts
+src/
+pkg/
+*.tar.xz
+*.tar.gz
+*.tar.zst
+*.patch
+!cachyos-surface.config
+config-*
+*.log
+
+# Keep these (committed files)
+!PKGBUILD
+!config
+!cachyos-surface.config
+!README.md
+!.gitignore

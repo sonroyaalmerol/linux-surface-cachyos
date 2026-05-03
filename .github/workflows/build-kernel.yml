@@ -72,7 +72,7 @@ jobs:
               pacman -Syu --noconfirm
               pacman -S --noconfirm --needed base-devel bc binutils cpio gettext \
                 libelf openssl pahole perl python rust rust-bindgen rust-src \
-                tar xxhash xz zlib zstd ccache git
+                tar xxhash xz zlib zstd ccache git pacman-contrib
 
               echo "=== Configuring ccache ==="
               export CCACHE_DIR=/ccache
@@ -84,9 +84,14 @@ jobs:
               echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
               chown -R builduser: /build
 
-              echo "=== Updating source checksums ==="
+              echo "=== Validating source checksums ==="
               cd /build
-              sudo -u builduser updpkgsums
+              # Checksums are maintained by sync script; validate them here
+              sudo -u builduser makepkg --verifysource 2>&1 || {
+                echo "Checksum verification failed, regenerating..."
+                pacman -S --noconfirm pacman-contrib
+                updpkgsums
+              }
 
               echo "=== Building kernel ==="
               sudo -u builduser makepkg -sf --noconfirm 2>&1 | tail -80

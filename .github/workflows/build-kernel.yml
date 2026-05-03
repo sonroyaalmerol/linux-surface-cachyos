@@ -184,9 +184,11 @@ jobs:
           ### Install
 
           \`\`\`bash
-          # Download
-          curl -sLO "https://github.com/${REPO}/releases/download/kernel-${TAG}/${{ needs.build.outputs.kernel_pkg || 'linux-surface-cachyos-' + tag + '-x86_64.pkg.tar.zst' }}"
-          curl -sLO "https://github.com/${REPO}/releases/download/kernel-${TAG}/${{ needs.build.outputs.headers_pkg || 'linux-surface-cachyos-headers-' + tag + '-x86_64.pkg.tar.zst' }}"
+          # Download all packages from this release
+          TAG="${TAG}"
+          REPO="${REPO}"
+          curl -sLO "https://github.com/${REPO}/releases/download/kernel-${TAG}/linux-surface-cachyos-${TAG}-x86_64.pkg.tar.zst"
+          curl -sLO "https://github.com/${REPO}/releases/download/kernel-${TAG}/linux-surface-cachyos-headers-${TAG}-x86_64.pkg.tar.zst"
 
           # Install
           sudo pacman -U *.pkg.tar.zst

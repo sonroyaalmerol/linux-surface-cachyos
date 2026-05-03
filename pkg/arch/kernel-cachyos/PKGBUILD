@@ -432,7 +432,7 @@ _package() {
     _sign_modules "${srcdir}/${_srcname}"
 
     echo "Installing boot image..."
-    install -Dm644 "$(_make -s image_name)" "$modulesdir/vmlinuz"
+    install -Dm644 "$(make "${BUILD_FLAGS[@]}" -s image_name)" "$modulesdir/vmlinuz"
     echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
 
     echo "Installing modules..."

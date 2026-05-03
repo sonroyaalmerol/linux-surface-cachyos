@@ -21,10 +21,6 @@ on:
 permissions:
   contents: write
 
-env:
-  # Container image — pinned Arch base with build deps pre-installed
-  BUILD_IMAGE: archlinux:latest
-
 jobs:
   # ==========================================================================
   # Build the kernel inside an Arch Linux container
@@ -37,16 +33,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up ccache directory
-        run: |
-          mkdir -p /tmp/kernel-ccache
-          echo "CCACHE_DIR=/tmp/kernel-ccache" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=5G" >> $GITHUB_ENV
-          # Restore from persistent cache if it exists
-          if [ -d "$RUNNER_TEMP/kernel-ccache" ]; then
-            cp -a "$RUNNER_TEMP/kernel-ccache/." /tmp/kernel-ccache/
-          fi
-
       - name: Read kernel version
         id: version
         run: |
@@ -57,7 +43,16 @@ jobs:
           echo "version=${VER}-${REL}" >> $GITHUB_OUTPUT
           echo "suffix=${SUFFIX}" >> $GITHUB_OUTPUT
           echo "tag=${VER}-${REL}" >> $GITHUB_OUTPUT
-          echo "pkgbase=linux-${SUFFIX}" >> $GITHUB_OUTPUT
+
+      - name: Restore ccache
+        run: |
+          mkdir -p /tmp/kernel-ccache
+          if [ -d "$RUNNER_TEMP/kernel-ccache" ]; then
+            cp -a "$RUNNER_TEMP/kernel-ccache/." /tmp/kernel-ccache/
+            echo "Restored ccache from persistent storage"
+          else
+            echo "No existing ccache — fresh build"
+          fi
 
       - name: Build kernel in Arch container
         run: |
@@ -89,9 +84,12 @@ jobs:
               echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
               chown -R builduser: /build
 
-              echo "=== Building kernel ==="
+              echo "=== Updating source checksums ==="
               cd /build
-              sudo -u builduser makepkg -sf --noconfirm 2>&1 | tail -50
+              sudo -u builduser updpkgsums
+
+              echo "=== Building kernel ==="
+              sudo -u builduser makepkg -sf --noconfirm 2>&1 | tail -80
 
               echo "=== Build complete ==="
               ls -la *.pkg.tar.zst
@@ -108,7 +106,6 @@ jobs:
           echo "Found packages:"
           echo "$PKGS"
 
-          # Verify both kernel and headers packages exist
           KERNEL=$(echo "$PKGS" | grep -v headers || true)
           HEADERS=$(echo "$PKGS" | grep headers || true)
 
@@ -120,21 +117,25 @@ jobs:
           echo "kernel_pkg=$(basename $KERNEL)" >> $GITHUB_OUTPUT
           echo "headers_pkg=$(basename $HEADERS)" >> $GITHUB_OUTPUT
 
-          # Generate checksums
-          cd ..
-          for f in kernel-cachyos/*.pkg.tar.zst; do
-            sha256sum "$f" >> CHECKSUMS.txt
+      - name: Generate checksums
+        run: |
+          cd pkg/arch/kernel-cachyos
+          echo "## Package Checksums" > ../CHECKSUMS.txt
+          echo "" >> ../CHECKSUMS.txt
+          echo "Built from commit: ${{ github.sha }}" >> ../CHECKSUMS.txt
+          echo "Kernel version: ${{ steps.version.outputs.version }}" >> ../CHECKSUMS.txt
+          echo "" >> ../CHECKSUMS.txt
+          for f in *.pkg.tar.zst; do
+            sha256sum "$f" >> ../CHECKSUMS.txt
           done
-          echo "Generated CHECKSUMS.txt:"
-          cat CHECKSUMS.txt
+          cat ../CHECKSUMS.txt
 
       - name: Persist ccache
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/kernel-ccache"
           cp -a /tmp/kernel-ccache/. "$RUNNER_TEMP/kernel-ccache/" 2>/dev/null || true
-          echo "ccache saved to $RUNNER_TEMP/kernel-ccache"
-          # Show final ccache stats
+          echo "ccache persisted to $RUNNER_TEMP/kernel-ccache"
           CCACHE_DIR=/tmp/kernel-ccache ccache -s 2>/dev/null || true
 
       - name: Upload packages as artifact
@@ -176,7 +177,7 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           REPO="${{ github.repository }}"
 
-          cat > release-notes.md << EOF
+          cat > release-notes.md << NOTES
           ## Linux Surface-CachyOS \`${TAG}\`
 
           Pre-built kernel packages combining CachyOS performance patches with linux-surface device support.
@@ -184,9 +185,7 @@ jobs:
           ### Install
 
           \`\`\`bash
-          # Download all packages from this release
-          TAG="${TAG}"
-          REPO="${REPO}"
+          # Download packages
           curl -sLO "https://github.com/${REPO}/releases/download/kernel-${TAG}/linux-surface-cachyos-${TAG}-x86_64.pkg.tar.zst"
           curl -sLO "https://github.com/${REPO}/releases/download/kernel-${TAG}/linux-surface-cachyos-headers-${TAG}-x86_64.pkg.tar.zst"
 
@@ -203,7 +202,7 @@ jobs:
           **Surface:** SAM, IPTS, ITHC, cameras, WiFi (mwifiex+ath10k), type cover, power button, RTC, HID
 
           Built from commit \`${{ github.sha }}\`
-          EOF
+          NOTES
 
       - name: Create release
         uses: softprops/action-gh-release@v2

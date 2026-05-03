@@ -77,8 +77,30 @@ def fix_multitouch_close():
         print("  -> Fixed mt_on_hid_hw_close function")
 
 
+def fix_missing_mt_quirks():
+    """Add missing MT_QUIRK_KEEP_LATENCY_ON_CLOSE define."""
+    try:
+        with open("drivers/hid/hid-multitouch.c", "r") as f:
+            content = f.read()
+    except FileNotFoundError:
+        return
+
+    # Check if KEEP_LATENCY_ON_CLOSE is used but not defined
+    if 'MT_QUIRK_KEEP_LATENCY_ON_CLOSE' in content and \
+       '#define MT_QUIRK_KEEP_LATENCY_ON_CLOSE' not in content:
+        # Add after SKIP_MODESET define (they're adjacent in the patch)
+        content = content.replace(
+            '#define MT_QUIRK_SKIP_MODESET_ON_HW_OPEN_CLOSE',
+            '#define MT_QUIRK_KEEP_LATENCY_ON_CLOSE\t\tBIT(25)\n#define MT_QUIRK_SKIP_MODESET_ON_HW_OPEN_CLOSE'
+        )
+        with open("drivers/hid/hid-multitouch.c", "w") as f:
+            f.write(content)
+        print("  -> Added MT_QUIRK_KEEP_LATENCY_ON_CLOSE define")
+
+
 if __name__ == "__main__":
     print("Fixing known patch conflicts...")
     fix_wants_ce_events()
     fix_multitouch_close()
+    fix_missing_mt_quirks()
     print("Patch conflict fixup complete")

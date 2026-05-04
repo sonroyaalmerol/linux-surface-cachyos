@@ -173,6 +173,9 @@ jobs:
           name: kernel-packages
           path: packages/
 
+      - name: List downloaded packages
+        run: find packages/ -type f -ls
+
       - name: Determine release tag
         id: version
         run: |
@@ -223,7 +226,7 @@ jobs:
           name: Linux Surface-CachyOS ${{ steps.version.outputs.tag }}
           body_path: release-notes.md
           files: |
-            packages/*.pkg.tar.zst
-            packages/CHECKSUMS.txt
+            packages/**/*.pkg.tar.zst
+            packages/**/CHECKSUMS.txt
           draft: false
           prerelease: false
